@@ -1,3 +1,8 @@
+# 📊 A volatilitás-előrejelzés gazdasági értéke  
+## GARCH és mélytanulási modellek összehasonlítása dinamikus portfólióallokációban
+
+---
+
 ## 📑 Tartalomjegyzék
 
 - [Áttekintés](#-áttekintés)
@@ -11,10 +16,7 @@
 - [Technológia](#-technológia)
 - [Összefoglalás](#-összefoglalás)
 
-# 📊 A volatilitás-előrejelzés gazdasági értéke  
-## GARCH és mélytanulási modellek összehasonlítása dinamikus portfólióallokációban
-
----
+ --- 
 
 ## 🧠 Áttekintés
 

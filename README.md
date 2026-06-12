@@ -1,15 +1,15 @@
 ## 📑 Tartalomjegyzék
 
-- #áttekintés
-- #cél
-- #modellek
-- #módszertan
-- #portfólióallokáció
-- #értékelési-metrikák
-- #fő-kérdés
-- #hozzájárulás
-- #technológia
-- #összefoglalás
+- [Áttekintés](#-áttekintés)
+- [Cél](#-cél)
+- [Modellek](#-modellek)
+- [Módszertan](#-módszertan)
+- [Portfólióallokáció](#-portfólióallokáció)
+- [Értékelési metrikák](#-értékelési-metrikák)
+- [Fő kérdés](#-fő-kérdés)
+- [Hozzájárulás](#-hozzájárulás)
+- [Technológia](#-technológia)
+- [Összefoglalás](#-összefoglalás)
 
 # 📊 A volatilitás-előrejelzés gazdasági értéke  
 ## GARCH és mélytanulási modellek összehasonlítása dinamikus portfólióallokációban

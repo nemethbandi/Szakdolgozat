@@ -14,7 +14,7 @@
 * [Volatility Targeting stratégia](#-volatility-targeting-stratégia)
 * [Portfólióteljesítmény értékelése](#-portfólióteljesítmény-értékelése)
 * [Kutatási kérdések](#-kutatási-kérdések)
-* [Felhasznált technológiák](#-%EF%B8%8F-felhasznált-technológiák)
+* [Felhasznált technológiák](#-felhasznált-technológiák)
 * [Összefoglalás](#-összefoglalás)
 
 ---

@@ -1,125 +1,134 @@
-# 📊 A volatilitás-előrejelzés gazdasági értéke  
-## GARCH és mélytanulási modellek összehasonlítása dinamikus portfólióallokációban
+# 📊 A volatilitás-előrejelzés gazdasági értéke
+
+## Standard volatilitásmodellek összehasonlítása dinamikus portfólióallokációban
 
 ---
 
 ## 📑 Tartalomjegyzék
 
-- [Áttekintés](#-áttekintés)
-- [Cél](#-cél)
-- [Modellek](#-modellek)
-- [Módszertan](#-módszertan)
-- [Portfólióallokáció](#-portfólióallokáció)
-- [Értékelési metrikák](#-értékelési-metrikák)
-- [Fő kérdés](#-fő-kérdés)
-- [Hozzájárulás](#-hozzájárulás)
-- [Technológia](#-technológia)
-- [Összefoglalás](#-összefoglalás)
+* [Áttekintés](#-áttekintés)
+* [Kutatási cél](#-kutatási-cél)
+* [Vizsgált modellek](#-vizsgált-modellek)
+* [Módszertan](#-módszertan)
+* [Volatilitás-előrejelzés értékelése](#-volatilitás-előrejelzés-értékelése)
+* [Volatility Targeting stratégia](#-volatility-targeting-stratégia)
+* [Portfólióteljesítmény értékelése](#-portfólióteljesítmény-értékelése)
+* [Kutatási kérdések](#-kutatási-kérdések)
+* [Felhasznált technológiák](#-felhasznált-technológiák)
+* [Összefoglalás](#-összefoglalás)
 
- --- 
+---
 
 ## 🧠 Áttekintés
 
-Ez a projekt a volatilitás-előrejelzés gyakorlati hasznosságát vizsgálja pénzügyi piacokon.  
-A fókusz nem csupán az előrejelzési pontosságon van, hanem azon is, hogy ezek az előrejelzések milyen hatással vannak a befektetési döntésekre és a portfólió teljesítményére.
+A szakdolgozat célja különböző standard volatilitás-előrejelző modellek gyakorlati alkalmazhatóságának vizsgálata pénzügyi piacokon. A kutatás középpontjában nem új modellek fejlesztése áll, hanem annak elemzése, hogy a meglévő módszerek milyen előrejelzési képességgel rendelkeznek, illetve ezek az előrejelzések milyen befektetési eredményekhez vezetnek.
 
 ---
 
-## 🎯 Cél
+## 🎯 Kutatási cél
 
-A kutatás célja:
+A dolgozat célja:
 
-- különböző volatilitás-előrejelző modellek összehasonlítása **egynapos horizonton**
-- annak vizsgálata, hogy az eltérő előrejelzések hogyan befolyásolják a **dinamikus portfólióallokációt**
-- annak megértése, hogy a jobb előrejelzés jelent-e **valós gazdasági előnyt**
+* különböző volatilitás-előrejelző modellek összehasonlítása egynapos előrejelzési horizonton,
+* a modellek előrejelzési képességének statisztikai vizsgálata,
+* annak elemzése, hogy az előrejelzett volatilitás hogyan használható fel dinamikus portfólióallokáció során,
+* annak meghatározása, hogy a pontosabb előrejelzés jelent-e gazdasági előnyt.
 
 ---
 
-## ⚙️ Modellek
+## ⚙️ Vizsgált modellek
 
-### 📉 Klasszikus ökonometriai modellek
-- GARCH  
-- EGARCH  
-- GJR-GARCH  
+### 📉 Klasszikus volatilitásmodellek
 
-### 🤖 Mélytanulási modellek (PyTorch)
-- LSTM (Long Short-Term Memory)  
-- GRU (Gated Recurrent Unit)  
+* GARCH(1,1)
+* EGARCH(1,1)
+* GJR-GARCH(1,1)
+
+### 🤖 Mélytanulási modellek
+
+* LSTM
+* GRU
+
+A modellek célja minden esetben a következő napi volatilitás előrejelzése.
 
 ---
 
 ## 🔁 Módszertan
 
-A modellek egy **rolling, out-of-sample** keretrendszerben kerülnek kiértékelésre:
+A vizsgálat rolling, out-of-sample keretrendszerben történik.
 
-- minden időpontban csak múltbeli adatok használata  
-- **1 napos előrejelzési horizont**  
-- folyamatos újrabecslés  
+A folyamat lépései:
 
-Az előrejelzett volatilitás alapján történik a portfólió súlyozása egy előre definiált:
-
-> 🎯 **target volatilitás** elérése érdekében
-
----
-
-## 💼 Portfólióallokáció
-
-A modellek által becsült volatilitás alapján egy dinamikus stratégia határozza meg:
-
-- az eszközbe fektetett tőkearányt  
-- a kockázatvállalás mértékét  
+1. A modellek becslése múltbeli adatok alapján.
+2. Egynapos volatilitás-előrejelzés készítése.
+3. Az előrejelzések statisztikai összehasonlítása.
+4. Az előrejelzések alkalmazása egy volatility targeting stratégiában.
+5. A portfóliók historikus visszatesztelése.
+6. A stratégiák teljesítményének összehasonlítása.
 
 ---
 
-## 📈 Értékelési metrikák
+## 📊 Volatilitás-előrejelzés értékelése
 
-A backtestelt stratégiák teljesítménye az alábbi mutatók alapján kerül összehasonlításra:
+A modellek előrejelzési teljesítményének összehasonlítása különböző statisztikai mutatók segítségével történik, például:
 
-- Sharpe-ráta  
-- Sortino-ráta  
-- Maximum Drawdown  
-- Teljes hozam  
+* MAPE
+* MSE
+* Diebold–Mariano teszt
 
----
-
-## 🔍 Fő kérdés
-
-Képesek-e a mélytanulási modellek:
-
-> **gazdasági értelemben felülmúlni a hagyományos volatilitásmodelleket?**
-
-Azaz:
-
-- jobb előrejelzés → jobb portfólió?
-- vagy a klasszikus modellek továbbra is versenyképesek?
+Az első vizsgálati szakasz célja annak meghatározása, hogy a különböző modellek közül melyik rendelkezik jobb volatilitás-előrejelzési képességgel.
 
 ---
 
-## 🧩 Hozzájárulás
+## 💼 Volatility Targeting stratégia
 
-A dolgozat fő újdonsága, hogy:
+A becsült volatilitás alapján dinamikusan kerül meghatározásra a portfólió kockázati kitettsége annak érdekében, hogy a stratégia egy előre meghatározott célvolatilitást tartson fenn.
 
-- nem csak statisztikai pontosságot vizsgál  
-- hanem a modellek **valós befektetési teljesítményét** is elemzi  
-- historikus adatokon végzett backtesztekkel  
+A stratégia célja:
+
+* a kockázat kontrollálása,
+* a túlzott volatilitás mérséklése,
+* a kedvezőbb kockázat–hozam profil elérése.
 
 ---
 
-## 🛠️ Technológia
+## 📈 Portfólióteljesítmény értékelése
 
-- Python  
-- PyTorch  
-- NumPy / Pandas  
-- saját backtesting framework  
+A volatility targeting stratégia eredményei az alábbi mutatók alapján kerülnek összehasonlításra:
+
+* Teljes hozam
+* Sharpe-ráta
+* Sortino-ráta
+* Maximum Drawdown
+
+A második vizsgálati szakasz célja annak meghatározása, hogy a jobb előrejelzési teljesítmény valóban jobb befektetési eredményekhez vezet-e.
+
+---
+
+## 🔍 Kutatási kérdések
+
+* Melyik modell képes a legpontosabb egynapos volatilitás-előrejelzésre?
+* A mélytanulási modellek felülmúlják-e a hagyományos GARCH-modelleket?
+* A jobb előrejelzési teljesítmény jobb portfólióteljesítményt eredményez-e?
+* Mennyire használhatók a volatilitásmodellek gyakorlati befektetési döntéstámogatásra?
+
+---
+
+## 🛠️ Felhasznált technológiák
+
+* Python
+* PyTorch
+* NumPy
+* Pandas
+* arch
+* Matplotlib
+* saját backtesting framework
 
 ---
 
 ## 📌 Összefoglalás
 
-A projekt célja annak feltárása, hogy a modern AI-alapú modellek:
-
-- ✔️ pontosabb előrejelzést adnak-e  
-- ✔️ és ez valóban jobb befektetési döntésekhez vezet-e  
+A dolgozat nem új volatilitásmodellek fejlesztésére törekszik, hanem azt vizsgálja, hogy a jelenleg elérhető klasszikus és mélytanulási módszerek milyen előrejelzési teljesítményt nyújtanak, illetve ezek az előrejelzések milyen eredményekhez vezetnek egy gyakorlati portfóliókezelési alkalmazásban. A kutatás két fő kérdésre keresi a választ: melyik modell becsli pontosabban a következő napi volatilitást, és ez a különbség megjelenik-e a befektetési teljesítményben is.
 
 ---
 

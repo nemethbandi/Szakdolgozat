@@ -44,10 +44,14 @@ A dolgozat célja:
 * EGARCH(1,1)
 * GJR-GARCH(1,1)
 
+### 📊 Realized volatility modell
+
+* HAR-RV (Heterogeneous Autoregressive Model)
+
 ### 🤖 Mélytanulási modellek
 
-* LSTM
-* GRU
+* LSTM (Long Short-Term Memory)
+* GRU (Gated Recurrent Unit)
 
 A modellek célja minden esetben a következő napi volatilitás előrejelzése.
 

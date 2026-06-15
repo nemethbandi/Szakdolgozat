@@ -73,8 +73,10 @@ A folyamat lépései:
 A modellek előrejelzési teljesítményének összehasonlítása különböző statisztikai mutatók segítségével történik, például:
 
 * MAPE
-* MSE
+* RMSE
 * Diebold–Mariano teszt
+* Patton-féle QLIKE veszteségfüggvény
+* Mincer–Zarnowitz regresszió
 
 Az első vizsgálati szakasz célja annak meghatározása, hogy a különböző modellek közül melyik rendelkezik jobb volatilitás-előrejelzési képességgel.
 

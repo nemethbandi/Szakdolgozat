@@ -44,7 +44,7 @@ A dolgozat célja:
 * EGARCH(1,1)
 * GJR-GARCH(1,1)
 
-### 📊 Realized volatility modell
+### 📐 Realized volatility modell
 
 * HAR-RV (Heterogeneous Autoregressive Model)
 

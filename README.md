@@ -44,10 +44,14 @@ A dolgozat célja:
 * EGARCH(1,1)
 * GJR-GARCH(1,1)
 
+### 📐 Realized volatility modell
+
+* HAR-RV (Heterogeneous Autoregressive Model)
+
 ### 🤖 Mélytanulási modellek
 
-* LSTM
-* GRU
+* LSTM (Long Short-Term Memory)
+* GRU (Gated Recurrent Unit)
 
 A modellek célja minden esetben a következő napi volatilitás előrejelzése.
 
@@ -73,8 +77,9 @@ A folyamat lépései:
 A modellek előrejelzési teljesítményének összehasonlítása különböző statisztikai mutatók segítségével történik, például:
 
 * MAPE
-* MSE
-* Diebold–Mariano teszt
+* RMSE
+* Patton-féle QLIKE veszteségfüggvény
+* Mincer–Zarnowitz regresszió
 
 Az első vizsgálati szakasz célja annak meghatározása, hogy a különböző modellek közül melyik rendelkezik jobb volatilitás-előrejelzési képességgel.
 

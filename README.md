@@ -78,7 +78,6 @@ A modellek előrejelzési teljesítményének összehasonlítása különböző 
 
 * MAPE
 * RMSE
-* Diebold–Mariano teszt
 * Patton-féle QLIKE veszteségfüggvény
 * Mincer–Zarnowitz regresszió
 

@@ -2,7 +2,7 @@ from arch import arch_model
 from arch.univariate.base import ARCHModelResult
 import pandas as pd
 
-def fit_garch_1_1(log_returns: pd.Series) -> ARCHModelResult:
+def fit_egarch_1_1(log_returns: pd.Series) -> ARCHModelResult:
 
     returns = log_returns.dropna() * 100
 
@@ -19,7 +19,7 @@ def fit_garch_1_1(log_returns: pd.Series) -> ARCHModelResult:
 
     return result
 
-def forecast_garch_1_1_volatility(garch_result: ARCHModelResult, horizon: int = 1) -> float:
+def forecast_egarch_1_1_volatility(garch_result: ARCHModelResult, horizon: int = 1) -> float:
     
     forecast = garch_result.forecast(horizon=horizon)
 

@@ -27,4 +27,4 @@ def forecast_gjrgarch_1_1_volatility(garch_result: ARCHModelResult, horizon: int
     variance_forecast = forecast.variance.iloc[-1, 0]
     volatility_forecast = variance_forecast ** 0.5
 
-    return volatility_forecast
+    return volatility_forecast / 100

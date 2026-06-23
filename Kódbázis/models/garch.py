@@ -1,6 +1,7 @@
 from arch import arch_model
 from arch.univariate.base import ARCHModelResult
 import pandas as pd
+import numpy as np
 
 def fit_garch_1_1(log_returns: pd.Series) -> ARCHModelResult:
 
@@ -19,11 +20,14 @@ def fit_garch_1_1(log_returns: pd.Series) -> ARCHModelResult:
 
     return result
 
-def forecast_garch_1_1_volatility(garch_result: ARCHModelResult, horizon: int = 1) -> float:
-    
-    forecast = garch_result.forecast(horizon=horizon)
+def forecast_garch_1_1_volatility(garch_result: ARCHModelResult, horizon: int = 1) -> np.ndarray:
 
-    variance_forecast = forecast.variance.iloc[-1, 0]
-    volatility_forecast = variance_forecast ** 0.5
+    forecast = garch_result.forecast(
+        horizon=horizon
+    )
 
-    return volatility_forecast / 100
+    variances = forecast.variance.iloc[-1].values
+
+    volatilities = np.sqrt(variances) / 100
+
+    return volatilities

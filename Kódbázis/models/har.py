@@ -1,6 +1,7 @@
 from arch.univariate import HARX
 from arch.univariate.base import ARCHModelResult
 import pandas as pd
+import numpy as np
 
 def fit_har_rv(log_returns: pd.Series) -> ARCHModelResult:
     
@@ -12,12 +13,14 @@ def fit_har_rv(log_returns: pd.Series) -> ARCHModelResult:
 
     return result
 
-def forecast_har_rv_volatility(har_result: ARCHModelResult, horizon: int = 1) -> float:
+def forecast_har_rv_volatility(har_result: ARCHModelResult, horizon: int = 1) -> np.ndarray:
 
     forecast = har_result.forecast(horizon=horizon)
 
-    variance_forecast = float(forecast.mean.iloc[-1, horizon - 1])
+    variances = forecast.mean.iloc[-1].values
 
-    volatility_forecast = max(variance_forecast, 0.0) ** 0.5
+    volatilities = np.sqrt(
+        np.maximum(variances, 0.0)
+    ) / 100
 
-    return volatility_forecast / 100
+    return volatilities

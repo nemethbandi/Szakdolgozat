@@ -2,13 +2,24 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import numpy as np
+from torch.utils.data import TensorDataset, DataLoader
+
+
+def create_log_volatility_series(log_returns: pd.Series, epsilon: float = 1e-8) -> pd.Series:
+
+    volatility = log_returns.abs()
+    log_volatility = np.log(volatility + epsilon)
+
+    return log_volatility.dropna()
 
 
 def create_sequences(log_returns: pd.Series, window_size: int = 30) -> tuple[np.ndarray, np.ndarray]:
 
-    returns = log_returns.dropna().values
+    log_volatility = create_log_volatility_series(log_returns)
 
-    data_length = len(returns)
+    values = log_volatility.values
+
+    data_length = len(values)
     sequence_size = data_length - window_size
 
     X = []
@@ -16,12 +27,12 @@ def create_sequences(log_returns: pd.Series, window_size: int = 30) -> tuple[np.
 
     for i in range(sequence_size):
 
-        temp = returns[i:i+window_size]
+        temp = values[i:i + window_size]
 
         X.append(temp)
 
         y.append(
-            returns[i + window_size] ** 2
+            values[i + window_size]
         )
 
     X = np.array(X, dtype=np.float32)
@@ -34,67 +45,115 @@ def create_sequences(log_returns: pd.Series, window_size: int = 30) -> tuple[np.
 
 
 class GRUVolatilityModel(nn.Module):
-    
-    def __init__(self, input_size: int = 1, hidden_size: int = 32, num_layers: int = 1, output_size: int = 1) -> None:
-        
+
+    def __init__(self, input_size: int = 1, hidden_size: int = 10, num_layers: int = 1, output_size: int = 1) -> None:
+
         super().__init__()
-        
+
         self.gru = nn.GRU(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
-        
+
         self.fc = nn.Linear(hidden_size, output_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+
         out, _ = self.gru(x)
         last_output = out[:, -1, :]
         prediction = self.fc(last_output)
-        
+
         return prediction
-        
 
-def fit_gru(log_returns: pd.Series) -> GRUVolatilityModel:
 
-    X, y = create_sequences(log_returns)
+def fit_gru(log_returns: pd.Series, window_size: int = 30, train_ratio: float = 0.8, batch_size: int = 32, epochs: int = 100, learning_rate: float = 0.001) -> GRUVolatilityModel:
 
-    X_train = torch.tensor(X)
-    y_train = torch.tensor(y)
+    X, y = create_sequences(log_returns, window_size=window_size)
+
+    split_index = int(len(X) * train_ratio)
+
+    X_train = X[:split_index]
+    y_train = y[:split_index]
+
+    X_val = X[split_index:]
+    y_val = y[split_index:]
+
+    train_dataset = TensorDataset(
+        torch.tensor(X_train, dtype=torch.float32),
+        torch.tensor(y_train, dtype=torch.float32)
+    )
+
+    val_dataset = TensorDataset(
+        torch.tensor(X_val, dtype=torch.float32),
+        torch.tensor(y_val, dtype=torch.float32)
+    )
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
+
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     model = GRUVolatilityModel()
 
     criterion = nn.MSELoss()
 
-    optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=0.001
-    )
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    epochs = 100
+    best_val_loss = float("inf")
+    patience = 7
+    patience_counter = 0
 
     for epoch in range(epochs):
 
-        predictions = model(X_train)
+        model.train()
 
-        loss = criterion(
-            predictions,
-            y_train
-        )
+        for X_batch, y_batch in train_loader:
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            predictions = model(X_batch)
+
+            loss = criterion(predictions, y_batch)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        model.eval()
+
+        val_losses = []
+
+        with torch.no_grad():
+
+            for X_val_batch, y_val_batch in val_loader:
+
+                val_predictions = model(X_val_batch)
+
+                val_loss = criterion(val_predictions, y_val_batch)
+
+                val_losses.append(val_loss.item())
+
+        avg_val_loss = np.mean(val_losses)
+
+        if avg_val_loss < best_val_loss:
+
+            best_val_loss = avg_val_loss
+            patience_counter = 0
+
+        else:
+
+            patience_counter += 1
+
+        if patience_counter >= patience:
+
+            break
 
     return model
 
 
-def forecast_gru_volatility(model: GRUVolatilityModel, log_returns: pd.Series) -> float:
+def forecast_gru_volatility(model: GRUVolatilityModel, log_returns: pd.Series, window_size: int = 30, epsilon: float = 1e-8) -> float:
 
-    x = np.array(
-        log_returns,
-        dtype=np.float32
-    )
+    log_volatility = create_log_volatility_series(log_returns, epsilon=epsilon)
 
-    x = x.reshape(1, 30, 1)
+    x = np.array(log_volatility.iloc[-window_size:], dtype=np.float32)
 
-    x = torch.tensor(x)
+    x = x.reshape(1, window_size, 1)
+
+    x = torch.tensor(x, dtype=torch.float32)
 
     model.eval()
 
@@ -102,8 +161,8 @@ def forecast_gru_volatility(model: GRUVolatilityModel, log_returns: pd.Series) -
 
         prediction = model(x)
 
-    variance = prediction.item()
+    log_volatility_forecast = prediction.item()
 
-    volatility = variance ** 0.5
+    volatility_forecast = np.exp(log_volatility_forecast)
 
-    return volatility
+    return float(volatility_forecast)

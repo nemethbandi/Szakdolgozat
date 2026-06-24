@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from utils import create_model_df, calculate_log_returns
 
 
@@ -34,6 +33,13 @@ def train_models(data: pd.DataFrame, train_window: int = 5, forecast_window: int
         print(f"Train: {train_start}-{train_end-1}")
         print(f"Forecast: {forecast_start}")
 
+        full_period_data = pd.concat(
+            [
+                train_data,
+                forecast_data
+            ]
+        )
+
         for _, model_row in model_df.iterrows():
 
             model_name = model_row["model"]
@@ -42,49 +48,22 @@ def train_models(data: pd.DataFrame, train_window: int = 5, forecast_window: int
 
             fitted_model = fit_function(train_data["log_returns"])
 
-            if model_name in ["GARCH", "EGARCH", "GJR-GARCH", "HAR"]:
+            for forecast_date in forecast_data.index:
 
-                volatility_forecasts = forecast_function(
+                available_data = full_period_data[
+                    full_period_data.index < forecast_date
+                ]["log_returns"]
+
+                volatility_forecast = forecast_function(
                     fitted_model,
-                    horizon=len(forecast_data)
+                    available_data
                 )
 
-                for forecast_date, volatility_forecast in zip(
-                    forecast_data.index,
-                    volatility_forecasts
-                ):
-
-                    results.append({
-                        "date": forecast_date,
-                        "model": model_name,
-                        "forecast_volatility": volatility_forecast
-                    })
-
-            else:
-
-                full_period_data = pd.concat(
-                    [
-                        train_data,
-                        forecast_data
-                    ]
-                )
-
-                for forecast_date in forecast_data.index:
-
-                    available_data = full_period_data[
-                        full_period_data.index < forecast_date
-                    ]["log_returns"]
-
-                    volatility_forecast = forecast_function(
-                        fitted_model,
-                        available_data
-                    )
-
-                    results.append({
-                        "date": forecast_date,
-                        "model": model_name,
-                        "forecast_volatility": volatility_forecast
-                    })
+                results.append({
+                    "date": forecast_date,
+                    "model": model_name,
+                    "forecast_volatility": volatility_forecast
+                })
 
         start_year += 1
 

@@ -2,7 +2,7 @@ import pandas as pd
 from utils import create_model_df, calculate_log_returns
 
 
-def train_models(data: pd.DataFrame, train_window: int = 5, forecast_window: int = 1) -> pd.DataFrame:
+def train_models(data: pd.DataFrame, train_window: int = 5, forecast_window: int = 1) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     start_year = data.index[0].year
 
@@ -11,6 +11,7 @@ def train_models(data: pd.DataFrame, train_window: int = 5, forecast_window: int
     model_df = create_model_df()
 
     results = []
+    loss_results = []
 
     for i in range((data.index[-1].year - data.index[0].year) - train_window + 1):
 
@@ -46,7 +47,24 @@ def train_models(data: pd.DataFrame, train_window: int = 5, forecast_window: int
             fit_function = model_row["fit_function"]
             forecast_function = model_row["forecast_function"]
 
-            fitted_model = fit_function(train_data["log_returns"])
+            if model_name in ["LSTM", "GRU"]:
+
+                fitted_model, model_loss_df = fit_function(
+                    train_data["log_returns"]
+                )
+
+                model_loss_df["model"] = model_name
+                model_loss_df["train_start"] = train_start
+                model_loss_df["train_end"] = train_end - 1
+                model_loss_df["forecast_year"] = forecast_start
+
+                loss_results.append(model_loss_df)
+
+            else:
+
+                fitted_model = fit_function(
+                    train_data["log_returns"]
+                )
 
             for forecast_date in forecast_data.index:
 
@@ -75,4 +93,15 @@ def train_models(data: pd.DataFrame, train_window: int = 5, forecast_window: int
         values="forecast_volatility"
     )
 
-    return wide_results_df
+    if len(loss_results) > 0:
+
+        loss_df = pd.concat(
+            loss_results,
+            ignore_index=True
+        )
+
+    else:
+
+        loss_df = pd.DataFrame()
+
+    return wide_results_df, loss_df

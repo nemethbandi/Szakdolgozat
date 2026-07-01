@@ -20,10 +20,19 @@ FEATURE_COLUMNS = [
 
 def build_volatility_features(
     log_returns: pd.Series,
-    epsilon: float = 1e-8
+    epsilon: float = 1e-8,
+    include_target: bool = True
 ) -> pd.DataFrame:
-    returns = log_returns.dropna().copy()
+    """
+    Volatility feature-ök építése GRU modellhez.
 
+    Fontos:
+    - Tanításhoz include_target=True kell, mert kell a következő napi target.
+    - Forecastoláshoz include_target=False kell, mert ott még nincs következő napi target,
+      és nem akarjuk eldobni a legfrissebb sort.
+    """
+
+    returns = log_returns.dropna().copy()
     squared_return = returns ** 2
     log_variance = np.log(squared_return + epsilon)
 
@@ -47,9 +56,12 @@ def build_volatility_features(
         squared_return.rolling(66).mean() + epsilon
     )
 
-    features["target"] = log_variance.shift(-1)
+    if include_target:
+        features["target"] = features["log_variance"].shift(-1)
 
-    return features.dropna()
+    features = features.dropna()
+
+    return features
 
 
 def create_sequences(
@@ -57,8 +69,23 @@ def create_sequences(
     window_size: int = 30,
     epsilon: float = 1e-8
 ) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Idősoros szekvenciák létrehozása.
 
-    feature_df = build_volatility_features(log_returns, epsilon=epsilon)
+    X alakja:
+        (minták száma, window_size, feature-ök száma)
+
+    y alakja:
+        (minták száma, 1)
+
+    A target a következő napi log_variance.
+    """
+
+    feature_df = build_volatility_features(
+        log_returns=log_returns,
+        epsilon=epsilon,
+        include_target=True
+    )
 
     X_values = feature_df[FEATURE_COLUMNS].values.astype(np.float32)
     y_values = feature_df["target"].values.astype(np.float32)
@@ -80,8 +107,9 @@ class GRUVolatilityModel(nn.Module):
     def __init__(
         self,
         input_size: int,
-        hidden_size: int = 32,
+        hidden_size: int = 64,
         num_layers: int = 1,
+        dense_units: int = 32,
         output_size: int = 1,
         dropout: float = 0.0
     ) -> None:
@@ -95,12 +123,18 @@ class GRUVolatilityModel(nn.Module):
             dropout=dropout if num_layers > 1 else 0.0
         )
 
-        self.fc = nn.Linear(hidden_size, output_size)
+        self.head = nn.Sequential(
+            nn.LayerNorm(hidden_size),
+            nn.Linear(hidden_size, dense_units),
+            nn.SiLU(),
+            nn.Dropout(dropout),
+            nn.Linear(dense_units, output_size),
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out, _ = self.gru(x)
         last_output = out[:, -1, :]
-        prediction = self.fc(last_output)
+        prediction = self.head(last_output)
 
         return prediction
 
@@ -111,6 +145,13 @@ def _standardize_train_validation(
     y_train: np.ndarray,
     y_val: np.ndarray
 ):
+    """
+    Standardizálás kizárólag a train adatok alapján.
+
+    Ez fontos, mert így a validációs adatok információja nem szivárog vissza
+    a tanításba.
+    """
+
     x_mean = X_train.mean(axis=(0, 1), keepdims=True)
     x_std = X_train.std(axis=(0, 1), keepdims=True) + 1e-8
 
@@ -145,10 +186,17 @@ def fit_gru(
     patience: int = 10,
     hidden_size: int = 32,
     num_layers: int = 1,
-    dropout: float = 0.0,
+    dropout: float = 0.2,
     epsilon: float = 1e-8,
     device: str | None = None
 ) -> tuple[GRUVolatilityModel, pd.DataFrame]:
+    """
+    GRU modell tanítása log-variancia előrejelzésre.
+
+    A modell a következő napi log_variance értéket tanulja.
+    A visszaadott modell tartalmazza a standardizáláshoz szükséges
+    train mean/std értékeket is.
+    """
 
     X, y = create_sequences(
         log_returns=log_returns,
@@ -276,6 +324,7 @@ def fit_gru(
 
     model.load_state_dict(best_model_state)
 
+    # Forecastoláshoz szükséges metaadatok eltárolása a modellen
     model.x_mean = x_mean
     model.x_std = x_std
     model.y_mean = y_mean
@@ -296,6 +345,13 @@ def forecast_gru_volatility(
     window_size: int | None = None,
     epsilon: float | None = None
 ) -> float:
+    """
+    Következő napi volatilitás előrejelzése GRU modellel.
+
+    Javított logika:
+    - Forecastoláskor include_target=False.
+    - Így nem dobjuk el a legfrissebb sort csak azért, mert nincs hozzá jövőbeli target.
+    """
 
     if window_size is None:
         window_size = model.window_size
@@ -303,7 +359,11 @@ def forecast_gru_volatility(
     if epsilon is None:
         epsilon = model.epsilon
 
-    feature_df = build_volatility_features(log_returns, epsilon=epsilon)
+    feature_df = build_volatility_features(
+        log_returns=log_returns,
+        epsilon=epsilon,
+        include_target=False
+    )
 
     if len(feature_df) < window_size:
         raise ValueError(f"At least {window_size} feature rows are required for forecasting.")
@@ -328,3 +388,28 @@ def forecast_gru_volatility(
     volatility_forecast = np.sqrt(variance_forecast)
 
     return float(volatility_forecast)
+
+
+def forecast_gru_variance(
+    model: GRUVolatilityModel,
+    log_returns: pd.Series,
+    window_size: int | None = None,
+    epsilon: float | None = None
+) -> float:
+    """
+    Következő napi variancia előrejelzése.
+
+    Ez akkor hasznos, ha a többi modell is varianciát ad vissza,
+    és egységesíteni akarod a kimeneteket.
+    """
+
+    volatility_forecast = forecast_gru_volatility(
+        model=model,
+        log_returns=log_returns,
+        window_size=window_size,
+        epsilon=epsilon
+    )
+
+    variance_forecast = volatility_forecast ** 2
+
+    return float(variance_forecast)

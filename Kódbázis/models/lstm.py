@@ -20,18 +20,18 @@ FEATURE_COLUMNS = [
 
 def build_volatility_features(
     log_returns: pd.Series,
-    epsilon: float = 1e-8
+    epsilon: float = 1e-8,
+    include_target: bool = True
 ) -> pd.DataFrame:
     """
-    Claude-szerű feature engineering, de egyszerű, egy fájlban használható formában.
+    Volatility feature-ök építése LSTM modellhez.
 
-    A célváltozó:
-        target = következő napi log-variance = log(r_{t+1}^2 + epsilon)
-
-    A feature-ök csak az adott napig elérhető információt használnak.
-    Forecastoláskor, ha a forecast_date előtti adatokat adod be,
-    akkor nincs look-ahead leakage.
+    Fontos:
+    - Tanításhoz include_target=True kell, mert kell a következő napi target.
+    - Forecastoláshoz include_target=False kell, mert ott még nincs következő napi target,
+      és nem akarjuk eldobni a legfrissebb sort.
     """
+
     returns = log_returns.dropna().copy()
     squared_return = returns ** 2
     log_variance = np.log(squared_return + epsilon)
@@ -56,8 +56,8 @@ def build_volatility_features(
         squared_return.rolling(66).mean() + epsilon
     )
 
-    # One-day-ahead target
-    features["target"] = log_variance.shift(-1)
+    if include_target:
+        features["target"] = features["log_variance"].shift(-1)
 
     features = features.dropna()
 
@@ -70,15 +70,22 @@ def create_sequences(
     epsilon: float = 1e-8
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Többváltozós LSTM input készítése.
+    Idősoros szekvenciák létrehozása.
 
-    X shape:
+    X alakja:
         (minták száma, window_size, feature-ök száma)
 
-    y shape:
+    y alakja:
         (minták száma, 1)
+
+    A target a következő napi log_variance.
     """
-    feature_df = build_volatility_features(log_returns, epsilon=epsilon)
+
+    feature_df = build_volatility_features(
+        log_returns=log_returns,
+        epsilon=epsilon,
+        include_target=True
+    )
 
     X_values = feature_df[FEATURE_COLUMNS].values.astype(np.float32)
     y_values = feature_df["target"].values.astype(np.float32)
@@ -100,8 +107,9 @@ class LSTMVolatilityModel(nn.Module):
     def __init__(
         self,
         input_size: int,
-        hidden_size: int = 32,
+        hidden_size: int = 64,
         num_layers: int = 1,
+        dense_units: int = 32,
         output_size: int = 1,
         dropout: float = 0.0
     ) -> None:
@@ -115,12 +123,18 @@ class LSTMVolatilityModel(nn.Module):
             dropout=dropout if num_layers > 1 else 0.0
         )
 
-        self.fc = nn.Linear(hidden_size, output_size)
+        self.head = nn.Sequential(
+            nn.LayerNorm(hidden_size),
+            nn.Linear(hidden_size, dense_units),
+            nn.SiLU(),
+            nn.Dropout(dropout),
+            nn.Linear(dense_units, output_size),
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out, _ = self.lstm(x)
         last_output = out[:, -1, :]
-        prediction = self.fc(last_output)
+        prediction = self.head(last_output)
 
         return prediction
 
@@ -132,9 +146,12 @@ def _standardize_train_validation(
     y_val: np.ndarray
 ):
     """
-    Claude-féle fontos rész:
-    scaler kizárólag train mintán illesztve.
+    Standardizálás kizárólag a train adatok alapján.
+
+    Ez fontos, mert így a validációs adatok információja nem szivárog vissza
+    a tanításba.
     """
+
     x_mean = X_train.mean(axis=(0, 1), keepdims=True)
     x_std = X_train.std(axis=(0, 1), keepdims=True) + 1e-8
 
@@ -169,10 +186,17 @@ def fit_lstm(
     patience: int = 10,
     hidden_size: int = 32,
     num_layers: int = 1,
-    dropout: float = 0.0,
+    dropout: float = 0.2,
     epsilon: float = 1e-8,
     device: str | None = None
 ) -> tuple[LSTMVolatilityModel, pd.DataFrame]:
+    """
+    LSTM modell tanítása log-variancia előrejelzésre.
+
+    A modell a következő napi log_variance értéket tanulja.
+    A visszaadott modell tartalmazza a standardizáláshoz szükséges
+    train mean/std értékeket is.
+    """
 
     X, y = create_sequences(
         log_returns=log_returns,
@@ -300,7 +324,7 @@ def fit_lstm(
 
     model.load_state_dict(best_model_state)
 
-    # A forecast függvény ezekkel pontosan ugyanúgy skáláz, mint tanításkor.
+    # Forecastoláshoz szükséges metaadatok eltárolása a modellen
     model.x_mean = x_mean
     model.x_std = x_std
     model.y_mean = y_mean
@@ -322,24 +346,24 @@ def forecast_lstm_volatility(
     epsilon: float | None = None
 ) -> float:
     """
-    Egy napos volatilitás-előrejelzés.
+    Következő napi volatilitás előrejelzése LSTM modellel.
 
-    Fontos:
-    A log_returns csak a forecast nap ELŐTTI adatokat tartalmazza.
-    Ez passzol a train_models.py mostani logikádhoz:
-
-        available_data = full_period_data[full_period_data.index < forecast_date]["log_returns"]
-
-    Output:
-        napi volatilitás, nem log-variance.
+    Javított logika:
+    - Forecastoláskor include_target=False.
+    - Így nem dobjuk el a legfrissebb sort csak azért, mert nincs hozzá jövőbeli target.
     """
+
     if window_size is None:
         window_size = model.window_size
 
     if epsilon is None:
         epsilon = model.epsilon
 
-    feature_df = build_volatility_features(log_returns, epsilon=epsilon)
+    feature_df = build_volatility_features(
+        log_returns=log_returns,
+        epsilon=epsilon,
+        include_target=False
+    )
 
     if len(feature_df) < window_size:
         raise ValueError(f"At least {window_size} feature rows are required for forecasting.")
@@ -366,215 +390,26 @@ def forecast_lstm_volatility(
     return float(volatility_forecast)
 
 
-class GRUVolatilityModel(nn.Module):
-    def __init__(
-        self,
-        input_size: int,
-        hidden_size: int = 32,
-        num_layers: int = 1,
-        output_size: int = 1,
-        dropout: float = 0.0
-    ) -> None:
-        super().__init__()
-
-        self.gru = nn.GRU(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            batch_first=True,
-            dropout=dropout if num_layers > 1 else 0.0
-        )
-
-        self.fc = nn.Linear(hidden_size, output_size)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out, _ = self.gru(x)
-        last_output = out[:, -1, :]
-        prediction = self.fc(last_output)
-
-        return prediction
-
-
-def fit_gru(
+def forecast_lstm_variance(
+    model: LSTMVolatilityModel,
     log_returns: pd.Series,
-    window_size: int = 30,
-    train_ratio: float = 0.8,
-    batch_size: int = 32,
-    epochs: int = 150,
-    learning_rate: float = 0.001,
-    patience: int = 10,
-    hidden_size: int = 32,
-    num_layers: int = 1,
-    dropout: float = 0.0,
-    epsilon: float = 1e-8,
-    device: str | None = None
-) -> tuple[GRUVolatilityModel, pd.DataFrame]:
+    window_size: int | None = None,
+    epsilon: float | None = None
+) -> float:
+    """
+    Következő napi variancia előrejelzése.
 
-    X, y = create_sequences(
+    Ez akkor hasznos, ha a többi modell is varianciát ad vissza,
+    és egységesíteni akarod a kimeneteket.
+    """
+
+    volatility_forecast = forecast_lstm_volatility(
+        model=model,
         log_returns=log_returns,
         window_size=window_size,
         epsilon=epsilon
     )
 
-    if len(X) < 2:
-        raise ValueError("Not enough observations to create training and validation sequences.")
+    variance_forecast = volatility_forecast ** 2
 
-    if not 0 < train_ratio < 1:
-        raise ValueError("train_ratio must be between 0 and 1.")
-
-    split_index = int(len(X) * train_ratio)
-
-    if split_index == 0 or split_index == len(X):
-        raise ValueError("train_ratio must produce non-empty training and validation sets.")
-
-    X_train = X[:split_index]
-    y_train = y[:split_index]
-
-    X_val = X[split_index:]
-    y_val = y[split_index:]
-
-    (
-        X_train,
-        X_val,
-        y_train,
-        y_val,
-        x_mean,
-        x_std,
-        y_mean,
-        y_std,
-    ) = _standardize_train_validation(X_train, X_val, y_train, y_val)
-
-    if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    train_dataset = TensorDataset(
-        torch.tensor(X_train, dtype=torch.float32),
-        torch.tensor(y_train, dtype=torch.float32)
-    )
-
-    val_dataset = TensorDataset(
-        torch.tensor(X_val, dtype=torch.float32),
-        torch.tensor(y_val, dtype=torch.float32)
-    )
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-
-    model = GRUVolatilityModel(
-        input_size=len(FEATURE_COLUMNS),
-        hidden_size=hidden_size,
-        num_layers=num_layers,
-        dropout=dropout
-    ).to(device)
-
-    criterion = nn.MSELoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-
-    best_val_loss = float("inf")
-    best_model_state = deepcopy(model.state_dict())
-    patience_counter = 0
-
-    loss_history = []
-
-    for epoch in range(epochs):
-        model.train()
-        train_losses = []
-
-        for X_batch, y_batch in train_loader:
-            X_batch = X_batch.to(device)
-            y_batch = y_batch.to(device)
-
-            predictions = model(X_batch)
-            loss = criterion(predictions, y_batch)
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            train_losses.append(loss.item())
-
-        model.eval()
-        val_losses = []
-
-        with torch.no_grad():
-            for X_val_batch, y_val_batch in val_loader:
-                X_val_batch = X_val_batch.to(device)
-                y_val_batch = y_val_batch.to(device)
-
-                val_predictions = model(X_val_batch)
-                val_loss = criterion(val_predictions, y_val_batch)
-
-                val_losses.append(val_loss.item())
-
-        avg_train_loss = float(np.mean(train_losses))
-        avg_val_loss = float(np.mean(val_losses))
-
-        loss_history.append({
-            "epoch": epoch + 1,
-            "train_loss": avg_train_loss,
-            "validation_loss": avg_val_loss
-        })
-
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-            best_model_state = deepcopy(model.state_dict())
-            patience_counter = 0
-        else:
-            patience_counter += 1
-
-        if patience_counter >= patience:
-            break
-
-    model.load_state_dict(best_model_state)
-
-    model.x_mean = x_mean
-    model.x_std = x_std
-    model.y_mean = y_mean
-    model.y_std = y_std
-    model.window_size = window_size
-    model.feature_columns = FEATURE_COLUMNS
-    model.epsilon = epsilon
-    model.device_name = device
-
-    loss_history_df = pd.DataFrame(loss_history)
-
-    return model, loss_history_df
-
-
-def forecast_gru_volatility(
-    model: GRUVolatilityModel,
-    log_returns: pd.Series,
-    window_size: int | None = None,
-    epsilon: float | None = None
-) -> float:
-    if window_size is None:
-        window_size = model.window_size
-
-    if epsilon is None:
-        epsilon = model.epsilon
-
-    feature_df = build_volatility_features(log_returns, epsilon=epsilon)
-
-    if len(feature_df) < window_size:
-        raise ValueError(f"At least {window_size} feature rows are required for forecasting.")
-
-    x = feature_df[model.feature_columns].iloc[-window_size:].values.astype(np.float32)
-    x = x.reshape(1, window_size, len(model.feature_columns))
-
-    x = (x - model.x_mean) / model.x_std
-
-    device = getattr(model, "device_name", "cpu")
-    x = torch.tensor(x, dtype=torch.float32).to(device)
-
-    model.eval()
-
-    with torch.no_grad():
-        prediction = model(x)
-
-    scaled_log_variance_forecast = prediction.item()
-    log_variance_forecast = scaled_log_variance_forecast * model.y_std + model.y_mean
-
-    variance_forecast = np.exp(log_variance_forecast)
-    volatility_forecast = np.sqrt(variance_forecast)
-
-    return float(volatility_forecast)
+    return float(variance_forecast)
